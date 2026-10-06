@@ -1,0 +1,28 @@
+# 运行产物
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.zip
+*.log
+*.heapsnapshot
+trace.json
+trace.json.gz
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 测试产物
+smoke.png
+_t.png
+mcp_verified.png
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

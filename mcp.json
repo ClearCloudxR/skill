@@ -1,0 +1,20 @@
+{
+  "_comment": "DSH MCP config for browser control. Merge into your DSH MCP settings, then RESTART DSH. This machine has NO Google Chrome, so the server is pointed at Edge via --executablePath (Edge is Chromium-based and speaks the same CDP protocol). With --executablePath the MCP launches and manages the browser itself - you do NOT need to start Edge or the debug port manually.",
+  "_c_drive_avoidance": "This machine's C: is nearly full, so every browser-related cache is redirected to E:. --userDataDir keeps the MCP browser profile off C:. The npm cache is redirected via `npm config set cache E:\\dsh-cache\\npm-cache`, and Playwright's binaries live in E:\\ms-playwright via the user env var PLAYWRIGHT_BROWSERS_PATH.",
+  "_alternative_browserUrl": "To instead attach to an ALREADY-RUNNING browser (window stays visible, reuses your logged-in profile), drop --executablePath and use --browser-url=http://127.0.0.1:9222, after starting Edge with ALL windows closed: \"C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe\" --remote-debugging-port=9222 --user-data-dir=\"E:\\dsh-cache\\dsh-edge-profile\"  (the default profile refuses to open a debug port on newer builds). Ready check: http://127.0.0.1:9222/json/version returns JSON.",
+  "_note_npx": "npx.ps1 is blocked by PowerShell execution policy on this machine, so invoke the npx.cmd shim through cmd /c instead of bare 'npx'.",
+  "mcpServers": {
+    "chrome-devtools": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "F:\\node\\npx.cmd",
+        "-y",
+        "chrome-devtools-mcp@latest",
+        "--executablePath=C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+        "--userDataDir=E:\\dsh-cache\\dsh-edge-profile"
+      ],
+      "env": {}
+    }
+  }
+}
