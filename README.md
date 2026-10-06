@@ -1,12 +1,25 @@
-# browser-automation
+# DSH 浏览器自动化技能（browser-automation）
 
-让 AI agent 真正操作浏览器的 DSH skill。**这不是一个通用模板**——它是某台具体 Windows 机器上
-调通并实测过的记录，路径、坑、版本号都是那台机器的实况。
+> **仓库名 `RSC` 与内容无关**，这里放的就是这个技能本身：让 AI agent 操作浏览器。
+> 目录名 `browser-automation` 才是它的身份。
+
+## 一句话
+
+给 DSH 里的 agent 装上「开浏览器、点页面、填表、截图、抓 JS 渲染后的内容」的能力，
+并记下某台 Windows 机器上把它调通的全过程与踩过的坑。
+
+**这不是通用模板**——路径、版本号、报错都是那台机器的实况。换机器要改哪些路径，
+见下面「本机环境」一节。
+
+## 三种用法
+
+| 我想… | 看哪里 |
+|---|---|
+| 直接用 | 装进 `~/.dsh/skills/browser-automation`，agent 会自动加载 |
+| 知道它到底能干什么 | 下面「实测记录」——逐项都是真跑过的 |
+| 自己搭一套 / 排错 | `SKILL.md` 的踩坑章节最有用（`insert:` 块、YAML 引号、`.pth` 注入…） |
 
 ## 它解决什么
-
-给 agent 装上「开浏览器、点页面、填表、截图、抓 JS 渲染后的内容」的能力。
-两条路子：
 
 | 方案 | 适用 | 状态 |
 |---|---|---|
@@ -30,6 +43,32 @@
 - **HMR 不能免重启**：`dsh-base` 默认启用 HMR 且监听的正是配置文件，但实测新增插件行不会挂载——
   它只管已挂载模块的重载，新增属于组合期的事。
 - **`take_screenshot` 的 `filePath` 会被工作区限制拦**，不传该参数让截图直接返回更省事。
+
+## 怎么装
+
+把仓库 clone 进 DSH 的 skills 目录（**目录名必须是 `browser-automation`**，
+skill 靠它和 `SKILL.md` 的 frontmatter 识别），agent 启动时会自动加载：
+
+```powershell
+git clone git@github.com:ClearCloudxR/RSC.git "$env:USERPROFILE\.dsh\skills\browser-automation"
+```
+
+两条路可以只用其中一条：
+
+- **只用 Playwright**：装依赖即可，不需要 MCP、不需要重启。
+  ```powershell
+  & $py -m pip install playwright
+  & $py -m playwright install chromium
+  ```
+- **要 MCP**：把 `mcp.json` 里的条目并进 profile 的 `cordis.patch.yml`，
+  **必须包在 `- insert:` 里**（写成顶层 `- id:` 会被静默忽略），然后重启 DSH。
+
+装完自检：
+
+```powershell
+& $py smoke_test.py            # Playwright 三项
+node examples\simulate_dsh_startup.js   # MCP 能否正常 spawn（不用重启）
+```
 
 ## 文件
 
