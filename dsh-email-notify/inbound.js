@@ -341,12 +341,17 @@ export function startInbound({ ctx, logger, config, onFailure }) {
             logger.warn(`inbound: could not report the failure: ${String(error)}`);
           }
         }
-        state.lastUid = Math.max(state.lastUid, message.uid + 1);
+        // The watermark records the highest UID actually examined, because the
+        // next search starts at `lastUid + 1`. Recording `uid + 1` here would
+        // mark a message that has not arrived yet as already seen and skip it.
+        state.lastUid = Math.max(state.lastUid, message.uid);
         handled += 1;
         logger.info(`inbound: uid ${message.uid} -> ${outcome}`);
       }
       if (handled > 0) {
-        state.lastUid = Math.max(state.lastUid, Number(result.uidNext) - 1);
+        // Advance only to UIDs we actually examined. Jumping to `uidNext - 1`
+        // would swallow a message the server had already accepted but not yet
+        // returned from SEARCH.
         await saveState();
       }
     } catch (error) {
