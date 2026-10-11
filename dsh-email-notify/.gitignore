@@ -1,0 +1,4 @@
+# 本地凭据与运行产物，绝不提交
+smtp.local.json
+outbox.log
+*.local.json

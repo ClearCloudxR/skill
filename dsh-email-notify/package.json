@@ -1,0 +1,26 @@
+{
+  "name": "dsh-email-notify",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DSH 任务跑完或需要你回复时，发一封邮件到手机",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./smtp": "./smtp.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "smtp.js",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

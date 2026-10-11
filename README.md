@@ -113,3 +113,11 @@ MCP 那条路逐项都真跑过，不是「能连上」：
 
 填表那次最能说明问题：填入值 → 点按钮 → 按钮的 onclick 读到该值并把标题改成
 `clicked:hello-mcp`，**填进去的值真的被页面用上了**。
+
+## 仓库里还有什么
+
+| 目录 | 内容 |
+|---|---|
+| 根目录 | browser-automation 技能本体：`SKILL.md`、`mcp.json`、`smoke_test.py`、`examples/` |
+| [`dsh-email-notify/`](dsh-email-notify/) | **DSH 邮件提醒插件**：任务跑完 / 出错 / 需要你回复时发邮件到手机，反过来也能用邮件给 DSH 下指令。零依赖（手写 SMTP + IMAP），带完整自测与自己的 `SKILL.md` |
+

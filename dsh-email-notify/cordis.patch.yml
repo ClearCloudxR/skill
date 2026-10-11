@@ -1,0 +1,12 @@
+﻿# dsh-email-notify bundle patch.
+#
+# Installing this package as a profile bundle mounts the row below. The profile's
+# own cordis.patch.yml (a later layer) overrides it by id with the real SMTP
+# credentials, so keep this layer limited to ordinary defaults: a patch entry
+# REPLACES the whole config, it does not merge.
+- insert:
+    - id: email-notify
+      name: dsh-email-notify
+      config:
+        enabled: true
+        to: you@example.com
