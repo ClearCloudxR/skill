@@ -111,6 +111,11 @@ export class ImapClient {
     // Install the error sink BEFORE anything can await: an unhandled socket
     // 'error' is an uncaught exception and takes the host process down.
     socket.on('error', () => {});
+    // An implicit-TLS TLSSocket surfaces faults that originate in the raw TCP
+    // socket it wraps; keep that layer attended as well. `_parent` is Node's
+    // own private link, so treat it as optional rather than required.
+    const parent = socket._parent;
+    if (parent && parent !== socket && typeof parent.on === 'function') parent.on('error', () => {});
     const ready = new Promise((resolve, reject) => {
       const event = this.secure ? 'secureConnect' : 'connect';
       const onReady = () => { socket.off('error', onError); resolve(); };

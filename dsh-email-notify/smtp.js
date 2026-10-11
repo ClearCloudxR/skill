@@ -122,6 +122,11 @@ export class SmtpClient {
     // 'error' is an uncaught exception, and inside the DSH host that kills the
     // whole application.
     socket.on('error', () => {});
+    // An implicit-TLS TLSSocket surfaces faults that originate in the raw TCP
+    // socket it wraps; keep that layer attended as well. `_parent` is Node's
+    // own private link, so treat it as optional rather than required.
+    const parent = socket._parent;
+    if (parent && parent !== socket && typeof parent.on === 'function') parent.on('error', () => {});
     const ready = new Promise((resolve, reject) => {
       const event = this.secure ? 'secureConnect' : 'connect';
       const onReady = () => { socket.off('error', onError); resolve(); };
