@@ -90,8 +90,9 @@ export class SmtpError extends Error {
 /**
  * One SMTP connection with a strict request/response queue. At most one
  * command is outstanding at a time, which is what the protocol guarantees.
+ * Exported for the socket-lifecycle tests.
  */
-class SmtpClient {
+export class SmtpClient {
   constructor({ host, port, secure, timeoutMs, allowInvalidCert }) {
     this.host = host;
     this.port = port;
@@ -117,6 +118,10 @@ class SmtpClient {
     const socket = this.secure
       ? tls.connect({ ...options, servername: this.host })
       : net.connect(options);
+    // Install the error sink BEFORE anything can await: an unhandled socket
+    // 'error' is an uncaught exception, and inside the DSH host that kills the
+    // whole application.
+    socket.on('error', () => {});
     const ready = new Promise((resolve, reject) => {
       const event = this.secure ? 'secureConnect' : 'connect';
       const onReady = () => { socket.off('error', onError); resolve(); };
@@ -152,6 +157,10 @@ class SmtpClient {
     socket.off('data', this.onData);
     socket.off('error', this.onError);
     socket.off('close', this.onClose);
+    // A TLS peer can reset the connection at any moment, and an 'error' event
+    // with no listener is an uncaught exception that kills the DSH host, so a
+    // detached socket must never go unattended.
+    socket.on('error', () => {});
   }
 
   #fail(error) {
@@ -202,6 +211,7 @@ class SmtpClient {
         servername: this.host,
         rejectUnauthorized: !this.allowInvalidCert,
       });
+      socket.on('error', () => {});
       socket.once('secureConnect', () => resolve(socket));
       socket.once('error', reject);
     });

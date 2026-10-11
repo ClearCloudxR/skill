@@ -76,9 +76,9 @@ function normalizeConfig(config) {
 /**
  * One IMAP connection. Responses are framed as complete protocol lines
  * (literals included) before any waiter sees them, and at most one tagged
- * command is in flight at a time.
+ * command is in flight at a time. Exported for the socket-lifecycle tests.
  */
-class ImapClient {
+export class ImapClient {
   constructor({ host, port, secure, timeoutMs, allowInvalidCert }) {
     this.host = host;
     this.port = port;
@@ -108,6 +108,9 @@ class ImapClient {
     const socket = this.secure
       ? tls.connect({ ...options, servername: this.host })
       : net.connect(options);
+    // Install the error sink BEFORE anything can await: an unhandled socket
+    // 'error' is an uncaught exception and takes the host process down.
+    socket.on('error', () => {});
     const ready = new Promise((resolve, reject) => {
       const event = this.secure ? 'secureConnect' : 'connect';
       const onReady = () => { socket.off('error', onError); resolve(); };
@@ -143,6 +146,11 @@ class ImapClient {
     socket.off('data', this.onData);
     socket.off('error', this.onError);
     socket.off('close', this.onClose);
+    // A TLS peer can reset the connection at any moment, and an 'error' event
+    // with no listener is an uncaught exception. Inside the DSH host that
+    // exception kills the whole application (observed: "read ECONNRESET" from
+    // TLSWrap.onStreamRead), so a detached socket must never go unattended.
+    socket.on('error', () => {});
   }
 
   #fail(error) {

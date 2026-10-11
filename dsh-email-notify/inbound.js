@@ -361,12 +361,20 @@ export function startInbound({ ctx, logger, config, onFailure }) {
     }
   }
 
+  /** Run one poll without ever letting a rejection escape. */
+  const safePoll = (label) => {
+    poll().catch((error) => logger.warn(`inbound: ${label} crashed: ${error instanceof Error ? error.message : String(error)}`));
+  };
+
   void (async () => {
     await loadState();
     // A short delay keeps startup light and lets the rest of the profile settle.
-    timer = setInterval(() => void poll(), inbound.pollMs);
+    // Every entry point catches its own failure: an unhandled rejection (or an
+    // unhandled socket error) inside the DSH host takes the whole app down.
+    timer = setInterval(() => safePoll('poll'), inbound.pollMs);
     timer.unref?.();
-    setTimeout(() => void poll(), 5000).unref?.();
+    const kick = setTimeout(() => safePoll('first poll'), 5000);
+    kick.unref?.();
   })();
 
   return {
