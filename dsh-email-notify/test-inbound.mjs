@@ -11,7 +11,7 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { classifyMail } from './inbound.js';
+import { classifyMail, normalizeSubject } from './inbound.js';
 import { parseMessage } from './mime.js';
 import { probeImap, fetchNewMessages } from './imap.js';
 
@@ -29,12 +29,19 @@ function check(name, condition, detail) {
   }
 }
 
-/** Build one raw RFC822 message for a fixture. */
+/**
+ * Build one raw RFC822 message for a fixture. A non-ASCII subject is emitted
+ * the way real mail does it (RFC 2047), because a raw UTF-8 header is
+ * non-conformant and parsers may legitimately read it as latin-1.
+ */
 function raw({ from = 'you@example.com', subject = '测试', body = '你好', headers = [] } = {}) {
+  const subjectLine = /^[\x20-\x7e]*$/.test(subject)
+    ? subject
+    : `=?UTF-8?B?${Buffer.from(subject, 'utf8').toString('base64')}?=`;
   return [
     `From: ${from}`,
     'To: you@example.com',
-    `Subject: ${subject}`,
+    `Subject: ${subjectLine}`,
     'Message-ID: <fixture@local>',
     'Content-Type: text/plain; charset=UTF-8',
     ...headers,
@@ -86,6 +93,29 @@ check('reply to a dead Session -> new Session',
 const threaded = parseMessage([raw().split('\r\n').slice(0, 4).join('\r\n'), 'References: <other@x> <notify-1@dsh>', '', '顺着 References 也要能接上'].join('\r\n'));
 check('References chain is honoured',
   classifyMail(threaded, { allowed, messageIds: { 'notify-1@dsh': 'session-abc' }, isLive: () => true }).action === 'continue');
+
+// A phone mail client that drops In-Reply-To must still continue the Session.
+const subjectKey = normalizeSubject('[DSH] ✅ 任务完成 · 整理数据');
+check('normalizeSubject strips reply prefixes',
+  normalizeSubject('Re: [DSH] ✅ 任务完成 · 整理数据') === subjectKey
+    && normalizeSubject('回复：[DSH] ✅ 任务完成 · 整理数据') === subjectKey
+    && normalizeSubject('RE:RE:[DSH] ✅ 任务完成 · 整理数据') === subjectKey,
+  JSON.stringify([normalizeSubject('Re: [DSH] ✅ 任务完成 · 整理数据'), subjectKey]));
+
+const noHeaders = parseMessage(raw({ subject: 'Re:[DSH] ✅ 任务完成 · 整理数据', body: '把剩下的表也做了' }));
+const bySubject = classifyMail(noHeaders, { allowed, subjects: { [subjectKey]: 'session-abc' }, isLive: () => true });
+check('reply without In-Reply-To still continues via subject',
+  bySubject.action === 'continue' && bySubject.sessionId === 'session-abc',
+  JSON.stringify(bySubject));
+
+const deadBySubject = classifyMail(noHeaders, { allowed, subjects: { [subjectKey]: 'session-abc' }, isLive: () => false });
+check('subject fallback also respects a dead Session',
+  deadBySubject.action === 'new' && /not running/.test(deadBySubject.reason ?? ''),
+  JSON.stringify(deadBySubject));
+
+check('a stranger replying to the same subject is still rejected',
+  classifyMail(parseMessage(raw({ from: 'someone@else.com', subject: 'Re:[DSH] ✅ 任务完成 · 整理数据', body: '你好' })),
+    { allowed, subjects: { [subjectKey]: 'session-abc' }, isLive: () => true }).action === 'skip');
 
 if (process.argv.includes('--live')) {
   console.log('\nlive mailbox (read-only)');

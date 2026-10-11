@@ -35,15 +35,43 @@ function userMessage({ text, mail }) {
 }
 
 /**
+ * Normalize a subject for thread matching: drop reply/forward prefixes so a
+ * client that does not send In-Reply-To (most phone mail apps) still matches
+ * the notification it quotes.
+ *
+ * @param subject - the raw Subject header.
+ * @returns a lowercase key without reply prefixes, or an empty string.
+ */
+export function normalizeSubject(subject) {
+  let value = String(subject ?? '').trim().toLowerCase();
+  if (value === '') return '';
+  let previous;
+  do {
+    previous = value;
+    value = value
+      .replace(/^\s*(?:re|fw|fwd|答复|回复|转发|轉發)\s*(?:\[\d+\])?\s*[:：]\s*/i, '')
+      .replace(/^\s*\[[^\]]{0,40}\]\s*/, (match) => (/dsh/i.test(match) ? match : ''))
+      .trim();
+  } while (value !== previous && value !== '');
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+/**
  * Decide what one parsed mail should do, without touching DSH.
  *
  * @param mail - a `parseMessage` result.
- * @param options - allowed sender set, remembered thread map, and a liveness
+ * @param options - allowed sender set, remembered thread maps, and a liveness
  *   probe for a mapped Session.
  * @returns `{ action: 'skip', reason }`, `{ action: 'continue', sessionId, body }`
  *   or `{ action: 'new', reason, body }`.
  */
-export function classifyMail(mail, { allowed, messageIds = {}, isLive = () => false, replyToSession = true }) {
+export function classifyMail(mail, {
+  allowed,
+  messageIds = {},
+  subjects = {},
+  isLive = () => false,
+  replyToSession = true,
+}) {
   if (!mail || typeof mail !== 'object') return { action: 'skip', reason: 'unparsable mail' };
   const body = stripQuoted(mail.text ?? '').trim();
   if (body === '') return { action: 'skip', reason: 'empty body after removing the quote' };
@@ -55,11 +83,18 @@ export function classifyMail(mail, { allowed, messageIds = {}, isLive = () => fa
   }
   if (mail.headers?.['x-dsh-notify']) return { action: 'skip', reason: 'our own notification mail' };
   if (replyToSession) {
+    // 1) The proper way: the reply quotes our Message-ID.
     for (const candidate of [mail.inReplyTo, ...(mail.references ?? [])].filter(Boolean)) {
       const sessionId = messageIds[candidate];
       if (!sessionId) continue;
       if (isLive(sessionId)) return { action: 'continue', sessionId, body };
       return { action: 'new', reason: `session ${sessionId} is not running`, body };
+    }
+    // 2) Fallback for clients that drop In-Reply-To: match the quoted subject.
+    const bySubject = subjects[normalizeSubject(mail.subject)];
+    if (bySubject) {
+      if (isLive(bySubject)) return { action: 'continue', sessionId: bySubject, body };
+      return { action: 'new', reason: `session ${bySubject} is not running`, body };
     }
   }
   return { action: 'new', reason: 'no matching notification thread', body };
@@ -78,6 +113,7 @@ export function startInbound({ ctx, logger, config, onFailure }) {
     uidValidity: null,
     lastUid: 0,
     messageIds: {},
+    subjects: {},
   };
   let timer = null;
   let stopped = false;
@@ -107,10 +143,13 @@ export function startInbound({ ctx, logger, config, onFailure }) {
     if (!inbound.stateFile) return;
     try {
       const raw = await readFile(inbound.stateFile, 'utf8');
-      const parsed = JSON.parse(raw);
+      // Tolerate a UTF-8 BOM: PowerShell's Set-Content adds one, and a failed
+      // parse would silently look like a first run and re-baseline the mailbox.
+      const parsed = JSON.parse(raw.replace(/^\uFEFF/, ''));
       state.uidValidity = parsed.uidValidity ?? null;
       state.lastUid = Number(parsed.lastUid) || 0;
       state.messageIds = parsed.messageIds && typeof parsed.messageIds === 'object' ? parsed.messageIds : {};
+      state.subjects = parsed.subjects && typeof parsed.subjects === 'object' ? parsed.subjects : {};
     } catch {
       // First run (or unreadable state): the baseline below skips all backlog.
     }
@@ -126,14 +165,23 @@ export function startInbound({ ctx, logger, config, onFailure }) {
     }
   }
 
-  /** Remember which notification mail belongs to which Session. */
-  function recordMessageId(messageId, sessionId) {
+  /**
+   * Remember which notification mail belongs to which Session — by Message-ID
+   * and by normalized subject, so clients that drop In-Reply-To still route.
+   */
+  function recordMessageId(messageId, sessionId, subject) {
     if (!messageId || !sessionId || !inbound.enabled) return;
     const keys = Object.keys(state.messageIds);
     if (keys.length >= MAX_REMEMBERED_MESSAGES) {
       for (const key of keys.slice(0, keys.length - MAX_REMEMBERED_MESSAGES + 1)) delete state.messageIds[key];
     }
     state.messageIds[messageId] = sessionId;
+    const key = normalizeSubject(subject);
+    const subjectKeys = Object.keys(state.subjects);
+    if (subjectKeys.length >= MAX_REMEMBERED_MESSAGES) {
+      for (const old of subjectKeys.slice(0, subjectKeys.length - MAX_REMEMBERED_MESSAGES + 1)) delete state.subjects[old];
+    }
+    if (key) state.subjects[key] = sessionId;
     void saveState();
   }
 
@@ -217,6 +265,7 @@ export function startInbound({ ctx, logger, config, onFailure }) {
     const decision = classifyMail(mail, {
       allowed,
       messageIds: state.messageIds,
+      subjects: state.subjects,
       isLive: (sessionId) => Boolean(ctx.get('agents')?.get(sessionId)),
       replyToSession: inbound.replyToSession,
     });

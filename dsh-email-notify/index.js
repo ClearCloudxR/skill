@@ -302,7 +302,7 @@ async function deliver(deps, mail, tag, sessionId) {
       allowInvalidCert: config.smtp.allowInvalidCert,
     }, Math.max(1, Number(config.smtp.attempts) || 1));
     // Remember the thread so a reply can be routed back to this Session.
-    inbound?.recordMessageId(messageId, sessionId);
+    inbound?.recordMessageId(messageId, sessionId, `${config.subjectPrefix} ${mail.subject}`);
     logger.info(`${tag} mail sent to ${config.to}`);
   } catch (error) {
     logger.warn(`${tag} mail failed: ${error instanceof Error ? error.message : String(error)}`);
